@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { ResearchSession, ResearchStatus } from './types';
+import React, { useState, useEffect } from 'react';
+import { ResearchSession, ResearchStatus, ComparisonResult } from './types';
 import { apiService } from './services/apiService';
 import { ResearchCard } from './components/ResearchCard';
 import { ResearchDetail } from './components/ResearchDetail';
@@ -11,8 +11,8 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [queryInput, setQueryInput] = useState('');
   const [isStarting, setIsStarting] = useState(false);
+  const [comparison, setComparison] = useState<{result: ComparisonResult, with: string} | null>(null);
 
-  // Load history on mount
   useEffect(() => {
     const fetchHistory = async () => {
       const data = await apiService.getHistory();
@@ -22,12 +22,13 @@ const App: React.FC = () => {
     fetchHistory();
   }, []);
 
-  const handleStartResearch = async (parentID?: string) => {
-    if (!queryInput.trim()) return;
+  const handleStartResearch = async (parentID?: string, customQuery?: string) => {
+    const q = customQuery || queryInput;
+    if (!q.trim()) return;
     
     setIsStarting(true);
-    const q = queryInput;
     setQueryInput('');
+    setComparison(null);
     
     await apiService.startResearch(q, parentID, (updatedSession) => {
       setHistory(prev => {
@@ -45,17 +46,27 @@ const App: React.FC = () => {
     setIsStarting(false);
   };
 
-  const handleContinue = (id: string) => {
-    const session = history.find(h => h.id === id);
-    if (session) {
-      setQueryInput(`Continuing research on "${session.query}": `);
-      // Focus the input if possible (UI improvement)
+  const handleContinue = (id: string, query?: string) => {
+    if (query) {
+      handleStartResearch(id, query);
+    } else {
+      const session = history.find(h => h.id === id);
+      if (session) {
+        setQueryInput(`Continuing research on "${session.query}": `);
+      }
+    }
+  };
+
+  const handleCompare = async (targetId: string) => {
+    if (!activeResearchId || activeResearchId === targetId) return;
+    const result = await apiService.compare(activeResearchId, targetId);
+    if (result) {
+      setComparison({ result, with: targetId });
     }
   };
 
   const handleFileUpload = async (id: string, file: File) => {
     await apiService.uploadFile(id, file);
-    // Re-fetch to update UI
     const updated = await apiService.getResearchDetails(id);
     if (updated) {
       setHistory(prev => prev.map(h => h.id === id ? updated : h));
@@ -76,31 +87,35 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-          <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Research History</div>
+          <div className="flex justify-between items-center px-2 py-1">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Research History</div>
+            {activeResearchId && (
+              <span className="text-[9px] text-blue-500 font-bold uppercase cursor-default">Select to Compare</span>
+            )}
+          </div>
           {history.map(session => (
-            <ResearchCard 
-              key={session.id} 
-              session={session} 
-              isActive={activeResearchId === session.id}
-              onClick={setActiveResearchId}
-            />
-          ))}
-          {history.length === 0 && (
-            <div className="text-center py-10 text-slate-400 text-sm">
-              <i className="fa-regular fa-folder-open text-2xl mb-2 block"></i>
-              No research history yet.
+            <div key={session.id} className="relative group">
+              <ResearchCard 
+                session={session} 
+                isActive={activeResearchId === session.id}
+                onClick={setActiveResearchId}
+              />
+              {activeResearchId && activeResearchId !== session.id && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleCompare(session.id); }}
+                  className="absolute right-2 top-2 hidden group-hover:flex w-6 h-6 bg-blue-600 text-white rounded-full items-center justify-center shadow-lg transition-all"
+                  title="Compare with Active"
+                >
+                  <i className="fa-solid fa-arrows-left-right text-[10px]"></i>
+                </button>
+              )}
             </div>
-          )}
-        </div>
-
-        <div className="p-4 bg-slate-50 border-t border-slate-100 text-center">
-          <p className="text-[10px] text-slate-400">DeepResearch v1.0 • Built with Gemini 3</p>
+          ))}
         </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
-        {/* Top Navbar */}
         <nav className="h-16 border-b border-slate-200 bg-white px-6 flex items-center justify-between">
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -112,15 +127,43 @@ const App: React.FC = () => {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full text-xs font-bold border border-emerald-100">
               <i className="fa-solid fa-wallet"></i>
-              Total Spend: ${history.reduce((acc, curr) => acc + curr.cost.estimatedCost, 0).toFixed(4)}
-            </div>
-            <div className="w-8 h-8 rounded-full bg-slate-200 border-2 border-white shadow-sm flex items-center justify-center text-slate-500">
-              <i className="fa-solid fa-user text-sm"></i>
+              Session Cost: ${activeSession?.cost.estimatedCost.toFixed(4) || '0.0000'}
             </div>
           </div>
         </nav>
 
-        {/* Content Area */}
+        {/* Comparison Alert */}
+        {comparison && (
+          <div className="mx-6 mt-6 bg-gradient-to-r from-indigo-600 to-blue-700 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
+            <div className="relative z-10">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <i className="fa-solid fa-code-compare"></i>
+                  Research Evolution Diff
+                </h3>
+                <button onClick={() => setComparison(null)} className="opacity-50 hover:opacity-100">
+                  <i className="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+              <p className="text-sm opacity-90 mb-6 italic">{comparison.result.semanticSummary}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/10">
+                  <p className="text-[10px] font-bold uppercase mb-2 tracking-widest">New Findings</p>
+                  <ul className="text-sm space-y-2">
+                    {comparison.result.addedFindings.map((f, i) => <li key={i} className="flex gap-2"><i className="fa-solid fa-plus-circle text-emerald-400 mt-1"></i> {f}</li>)}
+                  </ul>
+                </div>
+                <div className="bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/10">
+                  <p className="text-[10px] font-bold uppercase mb-2 tracking-widest">Contradictions</p>
+                  <ul className="text-sm space-y-2">
+                    {comparison.result.contradictions.map((f, i) => <li key={i} className="flex gap-2"><i className="fa-solid fa-triangle-exclamation text-amber-400 mt-1"></i> {f}</li>)}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex-1 p-6 overflow-hidden flex flex-col gap-6">
           {activeSession ? (
             <ResearchDetail 
@@ -133,14 +176,14 @@ const App: React.FC = () => {
               <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-6 text-3xl">
                 <i className="fa-solid fa-brain"></i>
               </div>
-              <h2 className="text-3xl font-bold text-slate-800 mb-4">Start New Deep Research</h2>
-              <p className="text-slate-500 max-w-md text-lg leading-relaxed">
-                Perform multi-step analysis, crawl the web, and generate high-quality structured reports with full attribution.
+              <h2 className="text-3xl font-bold text-slate-800 mb-4">Start Deep Research Session</h2>
+              <p className="text-slate-500 max-w-md text-lg">
+                Activate the deep research engine to perform multi-step analysis and discover verifiable truths.
               </p>
             </div>
           )}
 
-          {/* Prompt Area (Sticky at bottom) */}
+          {/* Prompt Area */}
           <div className="max-w-4xl w-full mx-auto relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl blur opacity-10 group-focus-within:opacity-25 transition duration-1000"></div>
             <div className="relative bg-white border border-slate-200 rounded-2xl shadow-xl p-2 flex items-center gap-2">
@@ -152,14 +195,14 @@ const App: React.FC = () => {
                 value={queryInput}
                 onChange={(e) => setQueryInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleStartResearch(activeSession?.id)}
-                placeholder={activeResearchId ? "Add follow-up research topic..." : "Enter research query (e.g. Impact of AI on sustainable energy)..."}
+                placeholder={activeResearchId ? "Add follow-up research topic..." : "Enter research query..."}
                 className="flex-1 bg-transparent border-none focus:ring-0 text-slate-800 py-3 text-lg font-medium"
                 disabled={isStarting}
               />
               <button 
                 onClick={() => handleStartResearch(activeSession?.id)}
                 disabled={isStarting || !queryInput.trim()}
-                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-200 flex items-center gap-2"
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg flex items-center gap-2"
               >
                 {isStarting ? (
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
@@ -169,32 +212,12 @@ const App: React.FC = () => {
                 <span className="hidden md:inline">Research</span>
               </button>
             </div>
-            {activeSession && (
-              <div className="mt-2 text-[10px] text-center text-slate-400 flex items-center justify-center gap-4">
-                <span className="flex items-center gap-1"><i className="fa-solid fa-check-circle text-emerald-500"></i> Context Enabled</span>
-                <span className="flex items-center gap-1"><i className="fa-solid fa-check-circle text-emerald-500"></i> Token Tracking Active</span>
-                <span className="flex items-center gap-1"><i className="fa-solid fa-check-circle text-emerald-500"></i> Multi-Step Agents Ready</span>
-              </div>
-            )}
           </div>
         </div>
       </main>
-
-      {/* Global styles for custom scrollbar */}
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 5px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #e2e8f0;
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #cbd5e1;
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
       `}</style>
     </div>
   );

@@ -1,6 +1,6 @@
 
 import { ResearchSession, ResearchStatus, UploadedDocument } from "../types";
-import { generateResearchReport } from "./geminiService";
+import { generateResearchReport, compareResearchSessions } from "./geminiService";
 
 const STORAGE_KEY = 'deep_research_history';
 
@@ -22,6 +22,14 @@ export const apiService = {
     return getHistory().find(r => r.id === id);
   },
 
+  compare: async (idA: string, idB: string) => {
+    const history = getHistory();
+    const a = history.find(h => h.id === idA);
+    const b = history.find(h => h.id === idB);
+    if (!a || !b) return null;
+    return await compareResearchSessions(a, b);
+  },
+
   startResearch: async (
     query: string, 
     parentResearchId?: string, 
@@ -39,8 +47,11 @@ export const apiService = {
       summary: '',
       status: ResearchStatus.PLANNING,
       reasoning: [],
+      timeline: [],
       sources: [],
-      cost: { inputTokens: 0, outputTokens: 0, estimatedCost: 0 },
+      cost: { inputTokens: 0, outputTokens: 0, estimatedCost: 0, optimizationTip: '' },
+      confidence: { score: 0, explanation: '' },
+      followUps: [],
       traceId: `trace_${Math.random().toString(36).substr(2, 9)}`,
       documents: [],
       createdAt: new Date().toISOString(),
@@ -58,6 +69,7 @@ export const apiService = {
         const sessionIndex = currentHistory.findIndex(h => h.id === newSession.id);
         if (sessionIndex !== -1) {
           currentHistory[sessionIndex].status = status;
+          currentHistory[sessionIndex].timeline.push(reasoning);
           currentHistory[sessionIndex].reasoning.push(reasoning);
           currentHistory[sessionIndex].updatedAt = new Date().toISOString();
           saveHistory(currentHistory);
