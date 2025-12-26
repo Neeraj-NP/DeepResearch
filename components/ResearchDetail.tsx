@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { ResearchSession, ResearchStatus } from '../types';
+import React, { useState, useRef } from 'react';
+import { ResearchSession, ResearchStatus, UploadedDocument } from '../types';
 
 interface ResearchDetailProps {
   session: ResearchSession;
@@ -9,12 +9,26 @@ interface ResearchDetailProps {
 }
 
 export const ResearchDetail: React.FC<ResearchDetailProps> = ({ session, onContinue, onFileUpload }) => {
-  const [activeTab, setActiveTab] = useState<'report' | 'analytics' | 'sources' | 'timeline'>('report');
+  const [activeTab, setActiveTab] = useState<'report' | 'strategy' | 'sources' | 'timeline'>('report');
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getConfidenceLevel = (score: number = 0) => {
     if (score > 85) return { label: 'Exceptional', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' };
     if (score > 60) return { label: 'Reliable', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' };
     return { label: 'Provisional', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' };
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsUploading(true);
+      try {
+        await onFileUpload(session.id, file);
+      } finally {
+        setIsUploading(false);
+      }
+    }
   };
 
   const score = session.confidence?.score || 0;
@@ -33,12 +47,21 @@ export const ResearchDetail: React.FC<ResearchDetailProps> = ({ session, onConti
           </div>
           <div className="flex items-center gap-6 text-xs font-bold text-slate-400">
             <span className="flex items-center gap-2"><i className="fa-regular fa-calendar"></i> {new Date(session.createdAt).toLocaleDateString()}</span>
-            <span className="flex items-center gap-2"><i className="fa-solid fa-fingerprint"></i> ID: {session.id}</span>
             <span className="flex items-center gap-2"><i className="fa-solid fa-layer-group"></i> {(session.sources || []).length} SOURCES</span>
+            <span className="flex items-center gap-2"><i className="fa-solid fa-file-lines"></i> {(session.documents || []).length} CONTEXT FILES</span>
           </div>
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
+          <input type="file" ref={fileInputRef} className="hidden" accept=".txt,.pdf" onChange={handleFileChange} />
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="px-5 py-2.5 bg-white border border-slate-200 hover:border-indigo-400 text-slate-700 rounded-xl text-xs font-black tracking-widest uppercase transition-all shadow-sm flex items-center gap-3 disabled:opacity-50"
+          >
+            {isUploading ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-paperclip"></i>}
+            Add Context
+          </button>
           <button 
             onClick={() => onContinue(session.id)}
             disabled={session.status !== ResearchStatus.COMPLETED}
@@ -54,8 +77,8 @@ export const ResearchDetail: React.FC<ResearchDetailProps> = ({ session, onConti
       <section className="grid grid-cols-2 md:grid-cols-4 border-b border-slate-100 divide-x divide-slate-100 bg-white">
         {[
           { label: 'Token Efficiency', value: `${(((session.cost?.inputTokens || 0) + (session.cost?.outputTokens || 0)) / 1000).toFixed(1)}k`, sub: `$${(session.cost?.estimatedCost || 0).toFixed(4)}`, icon: 'fa-bolt-lightning', color: 'text-amber-500' },
-          { label: 'Evidence Density', value: (session.sources || []).length, sub: 'Indexed Entries', icon: 'fa-database', color: 'text-indigo-500' },
-          { label: 'Claim Integrity', value: `${session.analytics?.agreementStats?.[0]?.value || 0}%`, sub: 'Agreement Rate', icon: 'fa-shield-halved', color: 'text-emerald-500' },
+          { label: 'Evidence density', value: (session.sources || []).length, sub: 'Indexed Entries', icon: 'fa-database', color: 'text-indigo-500' },
+          { label: 'Logic Integrity', value: `${session.analytics?.atomicClaims?.length || 0}`, sub: 'Claims Mapped', icon: 'fa-shield-halved', color: 'text-emerald-500' },
           { label: 'Research Depth', value: (session.timeline || []).length, sub: 'Iterations', icon: 'fa-brain', color: 'text-purple-500' }
         ].map((stat, i) => (
           <div key={i} className="p-5 flex items-center gap-4 hover:bg-slate-50/50 transition-colors">
@@ -77,7 +100,7 @@ export const ResearchDetail: React.FC<ResearchDetailProps> = ({ session, onConti
       <nav className="flex px-8 border-b border-slate-100 bg-white sticky top-0 z-10">
         {[
           { id: 'report', label: 'Synthesis Report', icon: 'fa-file-lines' },
-          { id: 'analytics', label: 'Evidence Matrix', icon: 'fa-chart-network' },
+          { id: 'strategy', label: 'Strategic Intelligence', icon: 'fa-chess' },
           { id: 'sources', label: 'Source Explorer', icon: 'fa-magnifying-glass-chart' },
           { id: 'timeline', label: 'System Process', icon: 'fa-microchip' }
         ].map(tab => (
@@ -100,7 +123,23 @@ export const ResearchDetail: React.FC<ResearchDetailProps> = ({ session, onConti
         <div className="max-w-7xl mx-auto p-8 lg:p-12">
           
           {activeTab === 'report' && (
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-4xl mx-auto space-y-12">
+              {(session.documents || []).length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {(session.documents || []).map(doc => (
+                    <div key={doc.id} className="p-5 bg-white border border-slate-200 rounded-[2rem] shadow-sm flex gap-4 hover:border-indigo-300 transition-all">
+                      <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shrink-0">
+                        <i className="fa-solid fa-file-lines text-xl"></i>
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-800 leading-none mb-1">{doc.name}</p>
+                        <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">{(doc.size / 1024).toFixed(1)} KB • Injection Active</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {session.status === ResearchStatus.COMPLETED ? (
                 <div className="space-y-12">
                   <div className="bg-white p-12 rounded-[2.5rem] shadow-sm border border-slate-200/50 prose-report">
@@ -110,29 +149,6 @@ export const ResearchDetail: React.FC<ResearchDetailProps> = ({ session, onConti
                       return <p key={i}>{line}</p>;
                     })}
                   </div>
-                  
-                  {(session.followUps || []).length > 0 && (
-                    <div className="bg-indigo-900 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden">
-                      <div className="absolute top-0 right-0 p-10 opacity-10 text-8xl"><i className="fa-solid fa-lightbulb"></i></div>
-                      <h3 className="text-xs font-black uppercase tracking-[0.3em] text-indigo-300 mb-8 flex items-center gap-4">
-                        <div className="h-px flex-1 bg-indigo-500/30"></div>
-                        Branching Trajectories
-                        <div className="h-px flex-1 bg-indigo-500/30"></div>
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {session.followUps.map((q, i) => (
-                          <button 
-                            key={i}
-                            onClick={() => onContinue(session.id, q)}
-                            className="text-left p-5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl transition-all group flex items-center justify-between"
-                          >
-                            <span className="font-bold text-sm text-indigo-50">{q}</span>
-                            <i className="fa-solid fa-chevron-right text-indigo-400 group-hover:translate-x-1 transition-transform"></i>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-40">
@@ -143,81 +159,105 @@ export const ResearchDetail: React.FC<ResearchDetailProps> = ({ session, onConti
                     </div>
                   </div>
                   <p className="text-2xl font-black text-slate-800 tracking-tight mb-2">Analyzing Information Graph</p>
-                  <p className="text-slate-500 font-medium tracking-wide analyzing-indicator italic">
-                    {(session.timeline || [])[(session.timeline || []).length - 1]?.title || 'Mapping data nodes...'}
-                  </p>
                 </div>
               )}
             </div>
           )}
 
-          {activeTab === 'analytics' && (
-            <div className="space-y-8">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-1 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col items-center">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-10 self-start">Confidence Signature</h4>
-                  <div className="relative w-48 h-48 flex items-center justify-center mb-8">
-                    <svg className="w-full h-full transform -rotate-90">
-                      <circle cx="96" cy="96" r="80" stroke="currentColor" strokeWidth="12" fill="transparent" className="text-slate-50" />
-                      <circle cx="96" cy="96" r="80" stroke="currentColor" strokeWidth="12" fill="transparent" 
-                        strokeDasharray={502.6} strokeDashoffset={502.6 - (502.6 * score / 100)} 
-                        strokeLinecap="round" className="text-indigo-600" />
-                    </svg>
-                    <div className="absolute flex flex-col items-center">
-                      <span className="text-5xl font-black text-slate-900 tracking-tighter">{score}</span>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500">% ACCURACY</span>
-                    </div>
-                  </div>
-                  <p className="text-sm font-medium text-slate-600 text-center leading-relaxed bg-slate-50 p-4 rounded-2xl">
-                    <i className="fa-solid fa-quote-left text-slate-300 block mb-2"></i>
-                    {session.confidence?.explanation || "Analytical engine idle."}
-                  </p>
-                </div>
-
-                <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-8">Credibility Indicators</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {(session.confidence?.factors || []).map((f, i) => (
-                      <div key={i} className="group p-5 bg-slate-50 rounded-2xl border border-slate-100 hover:border-indigo-200 hover:bg-white transition-all">
-                        <div className="flex justify-between items-center mb-4">
-                           <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
-                             f.impact === 'positive' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                           }`}>
-                             {f.impact} impact
-                           </div>
-                           <span className="text-xs font-black text-slate-800 tracking-tight">{f.value}</span>
-                        </div>
-                        <p className="font-bold text-slate-700 text-sm mb-1">{f.label}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-10">Claims Verification Graph</h4>
+          {activeTab === 'strategy' && (
+            <div className="space-y-12 animate-in fade-in duration-500">
+              {/* Atomic Claims Matrix */}
+              <section>
+                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-8 flex items-center gap-4">
+                  <div className="h-px flex-1 bg-slate-200"></div>
+                  Atomic Claims Index
+                  <div className="h-px flex-1 bg-slate-200"></div>
+                </h3>
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  {(session.analytics?.evidenceClaims || []).map((claim, i) => (
-                    <div key={i} className="flex gap-6 p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                       <div className="flex flex-col items-center shrink-0">
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white text-lg shadow-lg ${
-                            claim.status === 'Supported' ? 'bg-emerald-500 shadow-emerald-200' : 
-                            claim.status === 'Contested' ? 'bg-rose-500 shadow-rose-200' : 'bg-slate-400 shadow-slate-200'
-                          }`}>
-                            <i className={`fa-solid ${claim.status === 'Supported' ? 'fa-check' : claim.status === 'Contested' ? 'fa-xmark' : 'fa-question'}`}></i>
-                          </div>
-                       </div>
-                       <div className="flex-1 min-w-0">
-                         <h5 className="font-bold text-slate-800 mb-3 leading-snug">{claim.claim}</h5>
-                         <div className="flex gap-6 text-[10px] font-black uppercase tracking-widest">
-                            <span className="text-emerald-600">{claim.supportingSources} Support</span>
-                            <span className="text-rose-600">{claim.conflictingSources} Conflict</span>
-                         </div>
-                       </div>
+                  {(session.analytics?.atomicClaims || []).map((claim, i) => (
+                    <div key={i} className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all flex gap-6">
+                      <div className="flex flex-col items-center shrink-0">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white text-lg shadow-lg ${
+                          claim.strength === 'Strong' ? 'bg-emerald-500' : 'bg-amber-500'
+                        }`}>
+                          <i className={`fa-solid ${claim.strength === 'Strong' ? 'fa-shield-check' : 'fa-vial'}`}></i>
+                        </div>
+                        <div className="mt-3 text-[9px] font-black uppercase tracking-widest text-slate-400">{claim.strength}</div>
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-800 mb-2 leading-tight">{claim.text}</h4>
+                        <p className="text-xs text-slate-500 leading-relaxed mb-4">{claim.verificationLogic}</p>
+                        <div className="flex gap-4">
+                          <div className="text-[10px] font-black text-emerald-600 uppercase bg-emerald-50 px-3 py-1 rounded-full">{claim.supportingSources} Supporting</div>
+                          {claim.conflictingSources > 0 && (
+                            <div className="text-[10px] font-black text-rose-600 uppercase bg-rose-50 px-3 py-1 rounded-full">{claim.conflictingSources} Contradictions</div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
+              </section>
+
+              {/* Assumption Tracker */}
+              <section>
+                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-8 flex items-center gap-4">
+                  <div className="h-px flex-1 bg-slate-200"></div>
+                  Epistemic Assumptions
+                  <div className="h-px flex-1 bg-slate-200"></div>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {(session.analytics?.assumptions || []).map((asn, i) => (
+                    <div key={i} className="p-6 bg-slate-900 rounded-[2rem] text-white flex flex-col justify-between">
+                      <div className="mb-6">
+                        <div className={`text-[10px] font-black uppercase tracking-widest mb-3 ${
+                          asn.impact === 'High' ? 'text-rose-400' : 'text-indigo-400'
+                        }`}>{asn.impact} Impact</div>
+                        <p className="font-bold leading-relaxed">"{asn.statement}"</p>
+                      </div>
+                      <div className="p-4 bg-white/5 rounded-xl text-xs text-slate-400 border border-white/10 italic">
+                        Risk: {asn.risk}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Decision Matrix */}
+              <section>
+                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-8 flex items-center gap-4">
+                  <div className="h-px flex-1 bg-slate-200"></div>
+                  Strategic Decision Matrix
+                  <div className="h-px flex-1 bg-slate-200"></div>
+                </h3>
+                <div className="space-y-6">
+                  {(session.analytics?.decisionMatrix || []).map((opt, i) => (
+                    <div key={i} className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden flex flex-col md:flex-row shadow-sm">
+                      <div className="p-8 bg-slate-50 border-r border-slate-100 md:w-80 shrink-0">
+                        <h4 className="text-xl font-black text-slate-900 mb-2 leading-tight">{opt.title}</h4>
+                        <div className={`inline-block px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                          opt.riskLevel === 'Low' ? 'bg-emerald-100 text-emerald-700' : 
+                          opt.riskLevel === 'Medium' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+                        }`}>{opt.riskLevel} Risk Profile</div>
+                      </div>
+                      <div className="p-8 flex-1 grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                          <p className="text-[10px] font-black text-emerald-600 uppercase mb-3">Strategic Advantages</p>
+                          <ul className="space-y-2">
+                            {opt.pros.map((p, j) => <li key={j} className="text-sm font-bold text-slate-700 flex gap-3"><i className="fa-solid fa-plus-circle text-emerald-400 mt-0.5"></i> {p}</li>)}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black text-rose-600 uppercase mb-3">Identified Friction</p>
+                          <ul className="space-y-2">
+                            {opt.cons.map((c, j) => <li key={j} className="text-sm font-bold text-slate-700 flex gap-3"><i className="fa-solid fa-minus-circle text-rose-400 mt-0.5"></i> {c}</li>)}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
             </div>
           )}
 

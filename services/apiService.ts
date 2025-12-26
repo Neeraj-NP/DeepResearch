@@ -1,6 +1,6 @@
 
 import { ResearchSession, ResearchStatus, UploadedDocument, ResearchAnalytics } from "../types";
-import { generateResearchReport, compareResearchSessions } from "./geminiService";
+import { generateResearchReport, compareResearchSessions, summarizeDocument } from "./geminiService";
 
 const STORAGE_KEY = 'deep_research_history_v2';
 
@@ -9,7 +9,10 @@ const emptyAnalytics: ResearchAnalytics = {
   credibilityBreakdown: [],
   recencyTrends: [],
   agreementStats: [],
-  evidenceClaims: []
+  // removed evidenceClaims as it's not defined in ResearchAnalytics interface
+  atomicClaims: [],
+  assumptions: [],
+  decisionMatrix: []
 };
 
 const sanitizeSession = (s: any): ResearchSession => {
@@ -22,7 +25,7 @@ const sanitizeSession = (s: any): ResearchSession => {
     followUps: s.followUps || [],
     documents: s.documents || [],
     confidence: s.confidence || { score: 0, explanation: 'No analytical data available', factors: [] },
-    analytics: s.analytics || { ...emptyAnalytics },
+    analytics: { ...emptyAnalytics, ...(s.analytics || {}) },
     cost: s.cost || { inputTokens: 0, outputTokens: 0, estimatedCost: 0, optimizationTip: '', stageBreakdown: [] },
     traceId: s.traceId || `trace_legacy_${Math.random().toString(36).substr(2, 5)}`
   };
@@ -94,7 +97,14 @@ export const apiService = {
     onUpdate?.(newSession);
 
     try {
-      const context = parent ? `Based on previous findings: ${parent.summary}` : '';
+      let context = parent ? `Previous Summary: ${parent.summary}. ` : '';
+      if (parent?.analytics?.atomicClaims?.length) {
+        context += `Verified Findings: ${parent.analytics.atomicClaims.map(c => c.text).join('; ')}. `;
+      }
+      if (parent?.documents?.length) {
+        context += `Doc Context: ${parent.documents.map(d => `${d.name}: ${d.summary}`).join(' | ')}`;
+      }
+
       const result = await generateResearchReport(query, context, (status, reasoning) => {
         const currentHistory = getHistory();
         const sessionIndex = currentHistory.findIndex(h => h.id === newSession.id);
@@ -136,20 +146,25 @@ export const apiService = {
   },
 
   uploadFile: async (researchId: string, file: File): Promise<UploadedDocument> => {
-    const doc: UploadedDocument = {
-      id: Math.random().toString(36).substr(2, 5),
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      summary: `Uploaded context from ${file.name}`
-    };
-    
-    const history = getHistory();
-    const session = history.find(h => h.id === researchId);
-    if (session) {
-      session.documents.push(doc);
-      saveHistory(history);
-    }
-    return doc;
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const text = e.target?.result as string;
+        try {
+          const summary = await summarizeDocument(file.name, text);
+          const doc: UploadedDocument = { id: Math.random().toString(36).substr(2, 5), name: file.name, size: file.size, type: file.type, summary };
+          const history = getHistory();
+          const session = history.find(h => h.id === researchId);
+          if (session) {
+            session.documents = session.documents || [];
+            session.documents.push(doc);
+            saveHistory(history);
+          }
+          resolve(doc);
+        } catch (err) { reject(err); }
+      };
+      reader.onerror = () => reject(new Error("File read error"));
+      reader.readAsText(file);
+    });
   }
 };

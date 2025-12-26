@@ -21,11 +21,11 @@ export interface ResearchSource {
   title: string;
   url: string;
   snippet: string;
-  reasoning: string; // Why it was selected
-  supportsClaim: string; // The specific claim it backs
-  conflictsWith: string; // Details on contradictions
+  reasoning: string;
+  supportsClaim: string;
+  conflictsWith: string;
   credibility: 'High' | 'Medium' | 'Low';
-  credibilitySignal: string; // Heuristic-based explanation
+  credibilitySignal: string;
   type: 'Paper' | 'Blog' | 'News' | 'Report';
   year: number;
 }
@@ -42,7 +42,7 @@ export interface ResearchCost {
 }
 
 export interface ConfidenceMetrics {
-  score: number; // 0-100
+  score: number;
   explanation: string;
   factors: {
     label: string;
@@ -51,11 +51,27 @@ export interface ConfidenceMetrics {
   }[];
 }
 
-export interface EvidenceClaim {
-  claim: string;
+export interface AtomicClaim {
+  text: string;
+  strength: 'Strong' | 'Moderate' | 'Anecdotal' | 'Theoretical';
   status: 'Supported' | 'Contested' | 'Inconclusive';
   supportingSources: number;
   conflictingSources: number;
+  verificationLogic: string;
+}
+
+export interface ResearchAssumption {
+  statement: string;
+  impact: 'High' | 'Medium' | 'Low';
+  risk: string;
+}
+
+export interface DecisionOption {
+  title: string;
+  pros: string[];
+  cons: string[];
+  riskLevel: 'Low' | 'Medium' | 'High';
+  confidence: number;
 }
 
 export interface ResearchAnalytics {
@@ -63,7 +79,9 @@ export interface ResearchAnalytics {
   credibilityBreakdown: { label: string; value: number }[];
   recencyTrends: { year: number; count: number }[];
   agreementStats: { label: string; value: number; color: string }[];
-  evidenceClaims: EvidenceClaim[];
+  atomicClaims: AtomicClaim[];
+  assumptions: ResearchAssumption[];
+  decisionMatrix: DecisionOption[];
 }
 
 export interface ResearchSession {
