@@ -9,237 +9,273 @@ interface ResearchDetailProps {
 }
 
 export const ResearchDetail: React.FC<ResearchDetailProps> = ({ session, onContinue, onFileUpload }) => {
-  const [activeTab, setActiveTab] = useState<'report' | 'timeline' | 'sources'>('report');
+  const [activeTab, setActiveTab] = useState<'report' | 'analytics' | 'sources' | 'timeline'>('report');
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      onFileUpload(session.id, e.target.files[0]);
-    }
+  const getConfidenceLevel = (score: number = 0) => {
+    if (score > 85) return { label: 'Exceptional', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' };
+    if (score > 60) return { label: 'Reliable', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' };
+    return { label: 'Provisional', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' };
   };
 
-  const getConfidenceColor = (score: number) => {
-    if (score > 0.8) return 'text-emerald-500';
-    if (score > 0.5) return 'text-amber-500';
-    return 'text-rose-500';
-  };
+  const score = session.confidence?.score || 0;
+  const confidence = getConfidenceLevel(score);
 
   return (
-    <div className="flex-1 overflow-hidden flex flex-col h-full bg-white rounded-2xl shadow-sm border border-slate-200">
-      {/* Header */}
-      <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="flex-1 flex flex-col h-full bg-white rounded-3xl shadow-2xl border border-slate-200/60 overflow-hidden">
+      {/* Session Header */}
+      <header className="px-8 py-6 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-2xl font-bold text-slate-900 leading-tight line-clamp-1">{session.query}</h1>
-            {session.confidence.score > 0 && (
-              <div className="group relative">
-                <div className={`text-xs font-bold px-2 py-0.5 rounded-full border border-current ${getConfidenceColor(session.confidence.score)}`}>
-                  {(session.confidence.score * 100).toFixed(0)}% Reliable
-                </div>
-                <div className="absolute top-full left-0 mt-2 w-64 p-3 bg-slate-900 text-white text-[10px] rounded-xl hidden group-hover:block z-50 shadow-xl border border-slate-700">
-                  <p className="font-bold mb-1">Confidence Breakdown</p>
-                  {session.confidence.explanation}
-                </div>
-              </div>
-            )}
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none">{session.query}</h1>
+            <div className={`px-3 py-1 rounded-full border ${confidence.border} ${confidence.bg} ${confidence.color} text-[10px] font-black tracking-widest uppercase`}>
+              {confidence.label} {score}%
+            </div>
           </div>
-          <div className="flex items-center gap-4 text-sm text-slate-500">
-            <span className="flex items-center gap-1">
-              <i className="fa-regular fa-calendar"></i>
-              {new Date(session.createdAt).toLocaleString()}
-            </span>
-            <span className="flex items-center gap-1">
-              <i className="fa-solid fa-code-branch"></i>
-              Trace: {session.traceId.slice(-6)}
-            </span>
+          <div className="flex items-center gap-6 text-xs font-bold text-slate-400">
+            <span className="flex items-center gap-2"><i className="fa-regular fa-calendar"></i> {new Date(session.createdAt).toLocaleDateString()}</span>
+            <span className="flex items-center gap-2"><i className="fa-solid fa-fingerprint"></i> ID: {session.id}</span>
+            <span className="flex items-center gap-2"><i className="fa-solid fa-layer-group"></i> {(session.sources || []).length} SOURCES</span>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer shadow-sm transition-all">
-            <i className="fa-solid fa-cloud-arrow-up text-blue-500"></i>
-            Context
-            <input type="file" className="hidden" onChange={handleFileChange} />
-          </label>
+
+        <div className="flex items-center gap-3 shrink-0">
           <button 
             onClick={() => onContinue(session.id)}
             disabled={session.status !== ResearchStatus.COMPLETED}
-            className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-all shadow-md shadow-blue-200 disabled:opacity-50"
+            className="group px-6 py-2.5 bg-slate-900 hover:bg-indigo-600 text-white rounded-xl text-xs font-black tracking-widest uppercase transition-all shadow-xl shadow-slate-200 disabled:opacity-30 flex items-center gap-3"
           >
-            <i className="fa-solid fa-arrow-turn-up rotate-90"></i>
-            Continue
+            Branch Research
+            <i className="fa-solid fa-code-branch rotate-90 group-hover:translate-x-1 transition-transform"></i>
           </button>
         </div>
-      </div>
+      </header>
 
       {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 border-b border-slate-100">
-        <div className="bg-white p-3 rounded-xl border border-slate-200">
-          <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Total Cost</p>
-          <p className="text-lg font-bold text-emerald-600">${session.cost.estimatedCost.toFixed(4)}</p>
-          <p className="text-[9px] text-slate-400 mt-1 italic">{session.cost.optimizationTip}</p>
-        </div>
-        <div className="bg-white p-3 rounded-xl border border-slate-200">
-          <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Token Usage</p>
-          <p className="text-lg font-bold text-slate-800">
-            {((session.cost.inputTokens + session.cost.outputTokens) / 1000).toFixed(1)}k
-          </p>
-        </div>
-        <div className="bg-white p-3 rounded-xl border border-slate-200">
-          <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Sources</p>
-          <p className="text-lg font-bold text-slate-800">{session.sources.length}</p>
-        </div>
-        <div className="bg-white p-3 rounded-xl border border-slate-200">
-          <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Reasoning Steps</p>
-          <p className="text-lg font-bold text-slate-800">{session.timeline.length}</p>
-        </div>
-      </div>
+      <section className="grid grid-cols-2 md:grid-cols-4 border-b border-slate-100 divide-x divide-slate-100 bg-white">
+        {[
+          { label: 'Token Efficiency', value: `${(((session.cost?.inputTokens || 0) + (session.cost?.outputTokens || 0)) / 1000).toFixed(1)}k`, sub: `$${(session.cost?.estimatedCost || 0).toFixed(4)}`, icon: 'fa-bolt-lightning', color: 'text-amber-500' },
+          { label: 'Evidence Density', value: (session.sources || []).length, sub: 'Indexed Entries', icon: 'fa-database', color: 'text-indigo-500' },
+          { label: 'Claim Integrity', value: `${session.analytics?.agreementStats?.[0]?.value || 0}%`, sub: 'Agreement Rate', icon: 'fa-shield-halved', color: 'text-emerald-500' },
+          { label: 'Research Depth', value: (session.timeline || []).length, sub: 'Iterations', icon: 'fa-brain', color: 'text-purple-500' }
+        ].map((stat, i) => (
+          <div key={i} className="p-5 flex items-center gap-4 hover:bg-slate-50/50 transition-colors">
+            <div className={`w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center ${stat.color} shadow-inner`}>
+              <i className={`fa-solid ${stat.icon}`}></i>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{stat.label}</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-black text-slate-800 tracking-tighter">{stat.value}</span>
+                <span className="text-[10px] font-bold text-slate-400">{stat.sub}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </section>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-100 px-6">
-        {['report', 'timeline', 'sources'].map((tab) => (
+      <nav className="flex px-8 border-b border-slate-100 bg-white sticky top-0 z-10">
+        {[
+          { id: 'report', label: 'Synthesis Report', icon: 'fa-file-lines' },
+          { id: 'analytics', label: 'Evidence Matrix', icon: 'fa-chart-network' },
+          { id: 'sources', label: 'Source Explorer', icon: 'fa-magnifying-glass-chart' },
+          { id: 'timeline', label: 'System Process', icon: 'fa-microchip' }
+        ].map(tab => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab as any)}
-            className={`py-4 px-6 text-sm font-semibold transition-all relative ${
-              activeTab === tab ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`py-5 px-6 text-[11px] font-black tracking-widest uppercase flex items-center gap-3 transition-all relative ${
+              activeTab === tab.id ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            {activeTab === tab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full"></div>}
+            <i className={`fa-solid ${tab.icon} opacity-70`}></i>
+            {tab.label}
+            {activeTab === tab.id && <div className="absolute bottom-0 left-6 right-6 h-1 bg-indigo-600 rounded-t-full"></div>}
           </button>
         ))}
-      </div>
+      </nav>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-y-auto p-6 md:p-10 custom-scrollbar">
-        {activeTab === 'report' && (
-          <div className="max-w-4xl mx-auto">
-            {session.status === ResearchStatus.COMPLETED ? (
-              <div className="space-y-12">
-                <div className="prose prose-slate max-w-none">
-                  <div className="whitespace-pre-wrap text-slate-700 leading-relaxed text-lg">
-                    {session.report}
+      <div className="flex-1 overflow-y-auto bg-slate-50/50 custom-scrollbar">
+        <div className="max-w-7xl mx-auto p-8 lg:p-12">
+          
+          {activeTab === 'report' && (
+            <div className="max-w-4xl mx-auto">
+              {session.status === ResearchStatus.COMPLETED ? (
+                <div className="space-y-12">
+                  <div className="bg-white p-12 rounded-[2.5rem] shadow-sm border border-slate-200/50 prose-report">
+                    {(session.report || '').split('\n').map((line, i) => {
+                      if (line.startsWith('# ')) return <h1 key={i}>{line.replace('# ', '')}</h1>;
+                      if (line.startsWith('## ')) return <h2 key={i}>{line.replace('## ', '')}</h2>;
+                      return <p key={i}>{line}</p>;
+                    })}
+                  </div>
+                  
+                  {(session.followUps || []).length > 0 && (
+                    <div className="bg-indigo-900 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-10 opacity-10 text-8xl"><i className="fa-solid fa-lightbulb"></i></div>
+                      <h3 className="text-xs font-black uppercase tracking-[0.3em] text-indigo-300 mb-8 flex items-center gap-4">
+                        <div className="h-px flex-1 bg-indigo-500/30"></div>
+                        Branching Trajectories
+                        <div className="h-px flex-1 bg-indigo-500/30"></div>
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {session.followUps.map((q, i) => (
+                          <button 
+                            key={i}
+                            onClick={() => onContinue(session.id, q)}
+                            className="text-left p-5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl transition-all group flex items-center justify-between"
+                          >
+                            <span className="font-bold text-sm text-indigo-50">{q}</span>
+                            <i className="fa-solid fa-chevron-right text-indigo-400 group-hover:translate-x-1 transition-transform"></i>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-40">
+                  <div className="relative mb-10">
+                    <div className="w-24 h-24 border-[6px] border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+                    <div className="absolute inset-0 flex items-center justify-center text-indigo-600 text-xl font-black">
+                      <i className="fa-solid fa-brain"></i>
+                    </div>
+                  </div>
+                  <p className="text-2xl font-black text-slate-800 tracking-tight mb-2">Analyzing Information Graph</p>
+                  <p className="text-slate-500 font-medium tracking-wide analyzing-indicator italic">
+                    {(session.timeline || [])[(session.timeline || []).length - 1]?.title || 'Mapping data nodes...'}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="space-y-8">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-1 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col items-center">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-10 self-start">Confidence Signature</h4>
+                  <div className="relative w-48 h-48 flex items-center justify-center mb-8">
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle cx="96" cy="96" r="80" stroke="currentColor" strokeWidth="12" fill="transparent" className="text-slate-50" />
+                      <circle cx="96" cy="96" r="80" stroke="currentColor" strokeWidth="12" fill="transparent" 
+                        strokeDasharray={502.6} strokeDashoffset={502.6 - (502.6 * score / 100)} 
+                        strokeLinecap="round" className="text-indigo-600" />
+                    </svg>
+                    <div className="absolute flex flex-col items-center">
+                      <span className="text-5xl font-black text-slate-900 tracking-tighter">{score}</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500">% ACCURACY</span>
+                    </div>
+                  </div>
+                  <p className="text-sm font-medium text-slate-600 text-center leading-relaxed bg-slate-50 p-4 rounded-2xl">
+                    <i className="fa-solid fa-quote-left text-slate-300 block mb-2"></i>
+                    {session.confidence?.explanation || "Analytical engine idle."}
+                  </p>
+                </div>
+
+                <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-8">Credibility Indicators</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(session.confidence?.factors || []).map((f, i) => (
+                      <div key={i} className="group p-5 bg-slate-50 rounded-2xl border border-slate-100 hover:border-indigo-200 hover:bg-white transition-all">
+                        <div className="flex justify-between items-center mb-4">
+                           <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                             f.impact === 'positive' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                           }`}>
+                             {f.impact} impact
+                           </div>
+                           <span className="text-xs font-black text-slate-800 tracking-tight">{f.value}</span>
+                        </div>
+                        <p className="font-bold text-slate-700 text-sm mb-1">{f.label}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                
-                {/* Follow Ups */}
-                {session.followUps.length > 0 && (
-                  <div className="pt-10 border-t border-slate-100">
-                    <h3 className="text-sm font-bold text-slate-400 uppercase mb-6 flex items-center gap-2">
-                      <i className="fa-solid fa-lightbulb text-amber-500"></i>
-                      Suggested Follow-up Research
-                    </h3>
-                    <div className="flex flex-wrap gap-3">
-                      {session.followUps.map((q, idx) => (
-                        <button 
-                          key={idx}
-                          onClick={() => onContinue(session.id, q)}
-                          className="px-4 py-2 bg-blue-50 text-blue-700 rounded-xl text-sm font-medium hover:bg-blue-100 transition-colors text-left border border-blue-100 flex items-center gap-2"
-                        >
-                          <i className="fa-solid fa-plus-circle opacity-50"></i>
-                          {q}
-                        </button>
-                      ))}
+              </div>
+
+              <div className="bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-10">Claims Verification Graph</h4>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  {(session.analytics?.evidenceClaims || []).map((claim, i) => (
+                    <div key={i} className="flex gap-6 p-6 bg-slate-50 rounded-2xl border border-slate-100">
+                       <div className="flex flex-col items-center shrink-0">
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white text-lg shadow-lg ${
+                            claim.status === 'Supported' ? 'bg-emerald-500 shadow-emerald-200' : 
+                            claim.status === 'Contested' ? 'bg-rose-500 shadow-rose-200' : 'bg-slate-400 shadow-slate-200'
+                          }`}>
+                            <i className={`fa-solid ${claim.status === 'Supported' ? 'fa-check' : claim.status === 'Contested' ? 'fa-xmark' : 'fa-question'}`}></i>
+                          </div>
+                       </div>
+                       <div className="flex-1 min-w-0">
+                         <h5 className="font-bold text-slate-800 mb-3 leading-snug">{claim.claim}</h5>
+                         <div className="flex gap-6 text-[10px] font-black uppercase tracking-widest">
+                            <span className="text-emerald-600">{claim.supportingSources} Support</span>
+                            <span className="text-rose-600">{claim.conflictingSources} Conflict</span>
+                         </div>
+                       </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'sources' && (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+              {(session.sources || []).map((source, i) => (
+                <div key={i} className="bg-white rounded-[2rem] border border-slate-200/60 overflow-hidden shadow-sm flex flex-col hover:border-indigo-200 transition-all">
+                  <div className="p-8 bg-slate-50/50 border-b border-slate-100 flex justify-between items-start">
+                    <div className="flex gap-5 items-start">
+                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm border border-slate-100 text-lg">
+                        <i className="fa-solid fa-file-contract"></i>
+                      </div>
+                      <div>
+                        <h4 className="font-black text-slate-900 leading-tight mb-1">{source.title}</h4>
+                        <div className="flex items-center gap-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                          <span>{source.type}</span>
+                          <span className="w-1 h-1 rounded-full bg-slate-300"></span>
+                          <span>{source.year}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-                <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-                <p className="text-lg font-medium">Assembling Research Execution Story...</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'timeline' && (
-          <div className="max-w-3xl mx-auto">
-            <h2 className="text-xl font-bold text-slate-800 mb-8">Execution Story</h2>
-            <div className="space-y-0">
-              {session.timeline.map((step, idx) => (
-                <div key={idx} className="flex gap-6 group">
-                  <div className="flex flex-col items-center">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg ${
-                      step.type === 'plan' ? 'bg-blue-500' : 
-                      step.type === 'search' ? 'bg-purple-500' : 
-                      step.type === 'analyze' ? 'bg-emerald-500' : 'bg-slate-500'
-                    }`}>
-                      <i className={`fa-solid ${
-                        step.type === 'plan' ? 'fa-map' : 
-                        step.type === 'search' ? 'fa-magnifying-glass' : 
-                        step.type === 'analyze' ? 'fa-vial-circle-check' : 'fa-pen-nib'
-                      }`}></i>
+                  <div className="p-8 space-y-4 flex-1">
+                    <p className="text-sm text-slate-600 italic leading-relaxed">"{source.snippet}"</p>
+                    <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-xl text-xs font-bold text-slate-800">
+                      <p className="text-[9px] text-emerald-600 uppercase mb-1">Claim Supported</p>
+                      {source.supportsClaim}
                     </div>
-                    {idx !== session.timeline.length - 1 && <div className="w-0.5 flex-1 bg-slate-100 my-2"></div>}
+                  </div>
+                  <div className="px-8 py-4 bg-slate-900 text-[10px] font-medium text-slate-300">
+                    {source.reasoning}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeTab === 'timeline' && (
+            <div className="max-w-3xl mx-auto space-y-6">
+              {(session.timeline || []).map((step, i) => (
+                <div key={i} className="flex gap-6">
+                  <div className="flex flex-col items-center">
+                    <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg"><i className="fa-solid fa-microchip"></i></div>
+                    {i !== session.timeline.length - 1 && <div className="w-0.5 flex-1 bg-slate-200 my-2"></div>}
                   </div>
                   <div className="flex-1 pb-10">
-                    <div className="flex items-center gap-3 mb-1">
-                      <h4 className="text-lg font-bold text-slate-800">{step.title}</h4>
-                      <span className="text-[10px] text-slate-400 font-mono bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
-                        {new Date(step.timestamp).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <div className="p-4 bg-white rounded-xl border border-slate-200 text-slate-600 text-sm shadow-sm group-hover:border-blue-200 transition-colors">
+                    <h4 className="font-black text-slate-900">{step.title}</h4>
+                    <p className="text-xs text-slate-400 mb-2">{new Date(step.timestamp).toLocaleTimeString()}</p>
+                    <div className="p-4 bg-white border border-slate-200 rounded-2xl text-sm text-slate-600">
                       {step.description}
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {activeTab === 'sources' && (
-          <div className="max-w-5xl mx-auto space-y-6">
-            <h2 className="text-xl font-bold text-slate-800 mb-2">Sources Explorer</h2>
-            <p className="text-slate-500 text-sm mb-8">Verified data points and their impact on research outcome.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {session.sources.map((source, idx) => (
-                <div key={idx} className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:shadow-xl transition-all flex flex-col">
-                  <div className="p-5 flex-1">
-                    <div className="flex items-start justify-between gap-3 mb-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
-                          <i className="fa-solid fa-quote-left text-xs"></i>
-                        </div>
-                        <h4 className="font-bold text-slate-800 line-clamp-1">{source.title}</h4>
-                      </div>
-                      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${
-                        source.credibility === 'High' ? 'text-emerald-600 border-emerald-200 bg-emerald-50' :
-                        source.credibility === 'Medium' ? 'text-amber-600 border-amber-200 bg-amber-50' :
-                        'text-rose-600 border-rose-200 bg-rose-50'
-                      }`}>
-                        {source.credibility}
-                      </span>
-                    </div>
-                    <p className="text-xs text-blue-500 truncate mb-3 italic">{source.url}</p>
-                    <p className="text-sm text-slate-600 line-clamp-3 mb-4 leading-relaxed">
-                      {source.snippet}
-                    </p>
-                  </div>
-                  <div className="bg-slate-50 p-4 border-t border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">System Reasoning</p>
-                    <p className="text-xs text-slate-700 italic">{source.reasoning}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Docs Bar */}
-      {session.documents.length > 0 && (
-        <div className="px-6 py-3 bg-blue-50 border-t border-blue-100 flex items-center gap-4 overflow-x-auto whitespace-nowrap">
-          <span className="text-xs font-bold text-blue-700 uppercase shrink-0">Context Stack:</span>
-          {session.documents.map(doc => (
-            <div key={doc.id} className="bg-white px-3 py-1 rounded-full border border-blue-200 text-[10px] font-medium text-blue-600 flex items-center gap-2">
-              <i className="fa-regular fa-file-pdf"></i>
-              {doc.name}
-            </div>
-          ))}
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };

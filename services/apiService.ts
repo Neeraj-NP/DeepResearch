@@ -1,12 +1,42 @@
 
-import { ResearchSession, ResearchStatus, UploadedDocument } from "../types";
+import { ResearchSession, ResearchStatus, UploadedDocument, ResearchAnalytics } from "../types";
 import { generateResearchReport, compareResearchSessions } from "./geminiService";
 
-const STORAGE_KEY = 'deep_research_history';
+const STORAGE_KEY = 'deep_research_history_v2';
+
+const emptyAnalytics: ResearchAnalytics = {
+  sourceDistribution: [],
+  credibilityBreakdown: [],
+  recencyTrends: [],
+  agreementStats: [],
+  evidenceClaims: []
+};
+
+const sanitizeSession = (s: any): ResearchSession => {
+  return {
+    ...s,
+    status: s.status || ResearchStatus.IDLE,
+    reasoning: s.reasoning || [],
+    timeline: s.timeline || [],
+    sources: s.sources || [],
+    followUps: s.followUps || [],
+    documents: s.documents || [],
+    confidence: s.confidence || { score: 0, explanation: 'No analytical data available', factors: [] },
+    analytics: s.analytics || { ...emptyAnalytics },
+    cost: s.cost || { inputTokens: 0, outputTokens: 0, estimatedCost: 0, optimizationTip: '', stageBreakdown: [] },
+    traceId: s.traceId || `trace_legacy_${Math.random().toString(36).substr(2, 5)}`
+  };
+};
 
 const getHistory = (): ResearchSession[] => {
-  const data = localStorage.getItem(STORAGE_KEY);
-  return data ? JSON.parse(data) : [];
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    const parsed = data ? JSON.parse(data) : [];
+    return Array.isArray(parsed) ? parsed.map(sanitizeSession) : [];
+  } catch (e) {
+    console.error("Failed to load history:", e);
+    return [];
+  }
 };
 
 const saveHistory = (history: ResearchSession[]) => {
@@ -49,8 +79,9 @@ export const apiService = {
       reasoning: [],
       timeline: [],
       sources: [],
-      cost: { inputTokens: 0, outputTokens: 0, estimatedCost: 0, optimizationTip: '' },
-      confidence: { score: 0, explanation: '' },
+      cost: { inputTokens: 0, outputTokens: 0, estimatedCost: 0, optimizationTip: '', stageBreakdown: [] },
+      confidence: { score: 0, explanation: '', factors: [] },
+      analytics: { ...emptyAnalytics },
       followUps: [],
       traceId: `trace_${Math.random().toString(36).substr(2, 9)}`,
       documents: [],
