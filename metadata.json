@@ -1,0 +1,5 @@
+{
+  "name": "DeepResearch AI",
+  "description": "A sophisticated deep research dashboard featuring session persistence, research lineage, reasoning visualization, and token/cost tracking.",
+  "requestFramePermissions": []
+}
